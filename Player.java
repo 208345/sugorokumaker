@@ -8,6 +8,7 @@ public class Player {
     private Socket socket;
     private BufferedReader in;
     private PrintWriter out;
+    private boolean skipTurn = false;//休みを追加
 
     public Player(int id, Socket socket) throws IOException {
         this.id = id;
@@ -38,5 +39,12 @@ public class Player {
         } catch (IOException e) {
             // クローズ時の例外は無視
         }
+    }
+    public boolean isSkipTurn() {
+    return skipTurn;
+    }
+
+    public void setSkipTurn(boolean skipTurn) {
+        this.skipTurn = skipTurn;
     }
 }
