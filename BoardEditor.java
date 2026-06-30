@@ -143,7 +143,14 @@ public class BoardEditor extends JFrame {
                     public void actionPerformed(ActionEvent e) {
                         String input = JOptionPane.showInputDialog(
                             BoardEditor.this,
-                            "マス " + index + " の効果を入力してください。\n(進めるなら正の数、戻るなら負の数、なしなら0)",
+                            "マス " + index + " の効果を入力してください。\n\n"
+                            + "0：何もなし\n"
+                            + "正の数：○マス進む\n"
+                            + "負の数：○マス戻る\n"
+                            + "100：もう一回サイコロ\n"
+                            + "101：1回休み\n"
+                            + "102：スタートへ戻る\n"
+                            + "103：ランダムワープ",
                             board.getEffect(index)
                         );
                         
@@ -179,15 +186,17 @@ public class BoardEditor extends JFrame {
             massButtons[index].setText("GOAL");
             massButtons[index].setBackground(new Color(255, 220, 220));
         } else {
-            if (effect > 0) {
-                massButtons[index].setText("<html><center>マス " + index + "<br><font color='blue'><b>+" + effect + "</b></font></center></html>");
-                massButtons[index].setBackground(new Color(225, 240, 255));
-            } else if (effect < 0) {
-                massButtons[index].setText("<html><center>マス " + index + "<br><font color='red'><b>" + effect + "</b></font></center></html>");
-                massButtons[index].setBackground(new Color(255, 235, 215));
-            } else {
-                massButtons[index].setText("マス " + index);
-                massButtons[index].setBackground(Color.WHITE);
+            if(effect > 0 && effect < 100){
+                
+                massButtons[index].setText(
+                    "<html><center>マス "
+                    + index
+                    + "<br><font color='blue'><b>+"
+                    + effect
+                    + "</b></font></center></html>"
+                );
+            
+                massButtons[index].setBackground(new Color(225,240,255));
             }
         }
     }
