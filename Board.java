@@ -61,11 +61,34 @@ public class Board {
         }
     }
 
+    //v1.1で追加した
     public String getEffectDescription(int position) {
-        int effect = getEffect(position);
-        if (effect > 0) return effect + "マス進む！";
-        if (effect < 0) return Math.abs(effect) + "マス戻る...";
-        return "特に何もない。";
+
+    int effect = getEffect(position);
+
+    if(effect > 0 && effect < 100)
+        return effect + "マス進む！";
+
+    if(effect < 0)
+        return Math.abs(effect) + "マス戻る！";
+
+    switch(effect){
+
+        case 100:
+            return "もう一回サイコロ！";
+
+        case 101:
+            return "次のターン休み！";
+
+        case 102:
+            return "スタートへ戻る！";
+
+        case 103:
+            return "ランダムワープ！";
+
+        default:
+            return "特に何もない。";
+        }
     }
 
     // 盤面データをCSVファイルに保存
