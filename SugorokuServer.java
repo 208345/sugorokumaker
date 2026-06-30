@@ -67,6 +67,16 @@ public class SugorokuServer {
             
             for (int i = 0; i < players.size(); i++) {
                 Player current = players.get(i);
+
+                // ★追加
+                if(current.isSkipTurn()){
+                    broadcast(players,
+                        "MSG " + current.getName() + " は1回休みです。");
+
+                    current.setSkipTurn(false);
+                    continue;
+                }
+
                 broadcastState(players, turn, board);
                 broadcast(players, "MSG ▶ " + current.getName() + " の番です。");
                 current.sendMessage("YOUR_TURN");
@@ -95,20 +105,75 @@ public class SugorokuServer {
                 }
 
                 int effect = board.getEffect(current.getPosition());
-                if (effect != 0) {
-                    broadcast(players, "MSG 止まったマス: " + board.getEffectDescription(current.getPosition()));
-                    newPos = current.getPosition() + effect;
-                    
-                    if (newPos < 0) newPos = 0;
-                    if (newPos >= board.getLength() - 1) newPos = board.getLength() - 1;
-                    
-                    current.setPosition(newPos);
-                    
-                    try { Thread.sleep(800); } catch(InterruptedException e){}
+
+                if(effect != 0){
+                
+                    broadcast(players,
+                        "MSG 止まったマス: "
+                        + board.getEffectDescription(current.getPosition()));
+                
+                    // 普通の進む・戻る
+                    if(effect > -100 && effect < 100){
+                
+                        newPos = current.getPosition() + effect;
+                
+                        if(newPos < 0)
+                            newPos = 0;
+                
+                        if(newPos >= board.getLength()-1)
+                            newPos = board.getLength()-1;
+                
+                        current.setPosition(newPos);
+                    }
+                
+                    else{
+                
+                        switch(effect){
+                
+                            case 100:
+                
+                                broadcast(players,
+                                    "MSG もう一度サイコロを振れます！");
+                
+                                i--;
+                                break;
+                
+                            case 101:
+                
+                                current.setSkipTurn(true);
+                
+                                broadcast(players,
+                                    "MSG 次のターンは休みになります。");
+                
+                                break;
+                
+                            case 102:
+
+                                current.setPosition(0);
+                                
+                                broadcast(players,
+                                "MSG "+current.getName()+" はスタートへ戻った！");
+                
+                            case 103:
+
+                                int randomPos = random.nextInt(board.getLength() - 1);
+                            
+                                current.setPosition(randomPos);
+                            
+                                broadcast(players,
+                                    "MSG " + current.getName() + " はランダムワープした！");
+                            
+                                break;
+                        }
+                    }
+                
+                    Thread.sleep(800);
+                
                     broadcastState(players, turn, board);
-                    
-                    if (checkGoal(players, current, board.getLength())) {
-                        isGameOver = true; break;
+                
+                    if(checkGoal(players,current,board.getLength())){
+                        isGameOver=true;
+                        break;
                     }
                 }
 
