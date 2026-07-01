@@ -178,28 +178,73 @@ public class BoardEditor extends JFrame {
 
     // 各マスのボタンの色とテキストを更新する
     private void updateButtonText(int index) {
-        int effect = board.getEffect(index);
-        if (index == 0) {
-            massButtons[index].setText("START");
-            massButtons[index].setBackground(new Color(220, 245, 220));
-        } else if (index == board.getLength() - 1) {
-            massButtons[index].setText("GOAL");
-            massButtons[index].setBackground(new Color(255, 220, 220));
+    int effect = board.getEffect(index);
+
+    if (index == 0) {
+        massButtons[index].setText("START");
+        massButtons[index].setBackground(new Color(220, 245, 220));
+
+    } else if (index == board.getLength() - 1) {
+        massButtons[index].setText("GOAL");
+        massButtons[index].setBackground(new Color(255, 220, 220));
+
+    } else {
+
+        if (effect > 0 && effect < 100) {
+
+            massButtons[index].setText(
+                "<html><center>マス " + index +
+                "<br><font color='blue'><b>+" + effect +
+                "</b></font></center></html>");
+            massButtons[index].setBackground(new Color(225, 240, 255));
+
+        } else if (effect < 0) {
+
+            massButtons[index].setText(
+                "<html><center>マス " + index +
+                "<br><font color='red'><b>" + effect +
+                "</b></font></center></html>");
+            massButtons[index].setBackground(new Color(255, 235, 215));
+
         } else {
-            if(effect > 0 && effect < 100){
-                
-                massButtons[index].setText(
-                    "<html><center>マス "
-                    + index
-                    + "<br><font color='blue'><b>+"
-                    + effect
-                    + "</b></font></center></html>"
-                );
-            
-                massButtons[index].setBackground(new Color(225,240,255));
+
+            switch (effect) {
+
+                case 100:
+                    massButtons[index].setText(
+                        "<html><center>マス " + index +
+                        "<br>🎲もう一回</center></html>");
+                    massButtons[index].setBackground(Color.YELLOW);
+                    break;
+
+                case 101:
+                    massButtons[index].setText(
+                        "<html><center>マス " + index +
+                        "<br>😴休み</center></html>");
+                    massButtons[index].setBackground(Color.PINK);
+                    break;
+
+                case 102:
+                    massButtons[index].setText(
+                        "<html><center>マス " + index +
+                        "<br>🏠STARTへ</center></html>");
+                    massButtons[index].setBackground(Color.CYAN);
+                    break;
+
+                case 103:
+                    massButtons[index].setText(
+                        "<html><center>マス " + index +
+                        "<br>🌀ワープ</center></html>");
+                    massButtons[index].setBackground(Color.ORANGE);
+                    break;
+
+                default:
+                    massButtons[index].setText("マス " + index);
+                    massButtons[index].setBackground(Color.WHITE);
             }
         }
     }
+}
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
