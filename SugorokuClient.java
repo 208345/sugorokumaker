@@ -160,11 +160,14 @@ public class SugorokuClient extends JFrame {
                 int y = row * boxHeight;
 
                 int effect = board.getEffect(i);
+
                 if (i == 0) {
-                    g2.setColor(new Color(220, 245, 220)); 
+                    g2.setColor(new Color(220, 245, 220));
+                
                 } else if (i == totalMass - 1) {
-                    g2.setColor(new Color(255, 220, 220)); 
-                                } else if (effect > 0 && effect < 100) {
+                    g2.setColor(new Color(255, 220, 220));
+                
+                } else if (effect > 0 && effect < 100) {
                     g2.setColor(new Color(225, 240, 255));
                 
                 } else if (effect == 100) {
@@ -180,15 +183,10 @@ public class SugorokuClient extends JFrame {
                     g2.setColor(Color.ORANGE);
                 
                 } else if (effect < 0) {
-                    g2.setColor(new Color(255,235,215));
+                    g2.setColor(new Color(255, 235, 215));
                 
                 } else {
                     g2.setColor(Color.WHITE);
-                }
-                } else if (effect < 0) {
-                    g2.setColor(new Color(255, 235, 215)); 
-                } else {
-                    g2.setColor(Color.WHITE); 
                 }
 
                 g2.fillRect(x + 6, y + 6, boxWidth - 12, boxHeight - 12);
