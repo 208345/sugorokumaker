@@ -164,8 +164,27 @@ public class SugorokuClient extends JFrame {
                     g2.setColor(new Color(220, 245, 220)); 
                 } else if (i == totalMass - 1) {
                     g2.setColor(new Color(255, 220, 220)); 
-                } else if (effect > 0) {
-                    g2.setColor(new Color(225, 240, 255)); 
+                                } else if (effect > 0 && effect < 100) {
+                    g2.setColor(new Color(225, 240, 255));
+                
+                } else if (effect == 100) {
+                    g2.setColor(Color.YELLOW);
+                
+                } else if (effect == 101) {
+                    g2.setColor(Color.PINK);
+                
+                } else if (effect == 102) {
+                    g2.setColor(Color.CYAN);
+                
+                } else if (effect == 103) {
+                    g2.setColor(Color.ORANGE);
+                
+                } else if (effect < 0) {
+                    g2.setColor(new Color(255,235,215));
+                
+                } else {
+                    g2.setColor(Color.WHITE);
+                }
                 } else if (effect < 0) {
                     g2.setColor(new Color(255, 235, 215)); 
                 } else {
@@ -184,13 +203,41 @@ public class SugorokuClient extends JFrame {
                 g2.drawString(labelStr, x + 12, y + 26);
 
                 if (effect != 0) {
-                    g2.setFont(new Font("Arial", Font.BOLD, 16));
-                    if (effect > 0) {
-                        g2.setColor(new Color(0, 100, 230));
+
+                    g2.setFont(new Font("Arial", Font.BOLD, 15));
+                
+                    if (effect > 0 && effect < 100) {
+                
+                        g2.setColor(new Color(0,100,230));
                         g2.drawString("+" + effect, x + 12, y + 55);
-                    } else {
-                        g2.setColor(new Color(220, 30, 30));
+                
+                    } else if (effect < 0) {
+                
+                        g2.setColor(new Color(220,30,30));
                         g2.drawString("" + effect, x + 12, y + 55);
+                
+                    } else {
+                
+                        g2.setColor(Color.BLACK);
+                
+                        switch(effect){
+                
+                            case 100:
+                                g2.drawString("もう1回", x + 12, y + 55);
+                                break;
+                
+                            case 101:
+                                g2.drawString("休み", x + 12, y + 55);
+                                break;
+                
+                            case 102:
+                                g2.drawString("START", x + 12, y + 55);
+                                break;
+                
+                            case 103:
+                                g2.drawString("ワープ", x + 12, y + 55);
+                                break;
+                        }
                     }
                 }
 
