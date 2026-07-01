@@ -167,7 +167,11 @@ public class SugorokuServer {
                         }
                     }
                 
-                    Thread.sleep(800);
+                    try {
+                        Thread.sleep(800);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
                 
                     broadcastState(players, turn, board);
                 
