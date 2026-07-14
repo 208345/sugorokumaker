@@ -1,124 +1,101 @@
+//v2.0
+
 import java.io.*;
+import java.util.Random;
 
 public class Board {
-    private int length;
-    private int[] effects;
+    private int width;
+    private int height;
+    private int[][] grid; // 0:白(通常), 1:青(プラス), 2:赤(マイナス), 3:黄(アイテム)
+    private int goalX;
+    private int goalY;
+    private Random rand = new Random();
 
-    // デフォルト20マス用のコンストラクタ
-    public Board(int length) {
-        this.length = length;
-        this.effects = new int[length];
-        
-        if (length >= 20) {
-            effects[4] = 2;   // 4マス目: 2マス進む
-            effects[9] = -3;  // 9マス目: 3マス戻る
-            effects[14] = 3;  // 14マス目: 3マス進む
-            effects[17] = -2; // 17マス目: 2マス戻る
-        }
+    // 新規作成用のコンストラクタ
+    public Board(int width, int height) {
+        this.width = width;
+        this.height = height;
+        this.grid = new int[height][width];
+        initGrid();
+        relocateGoal();
     }
 
-    // CSVファイルから盤面を読み込むコンストラクタ
+    // CSVから読み込むコンストラクタ
     public Board(String filename) throws IOException {
         loadFromFile(filename);
     }
 
-    public int getLength() {
-        return length;
-    }
-
-    // 【追加】盤面のサイズを動的に変更するメソッド
-    public void resize(int newLength) {
-        if (newLength < 2) {
-            newLength = 2; // 最低でもSTARTとGOALの2マスは必要
-        }
-        
-        int[] newEffects = new int[newLength];
-        // 既存の効果を新しい配列にコピー（サイズが小さくなった場合は溢れた分は切り捨て）
-        int copyLength = Math.min(this.length, newLength);
-        System.arraycopy(this.effects, 0, newEffects, 0, copyLength);
-        
-        // ゴール位置が変わるため、古いゴール地点にあった効果はリセットする
-        if (this.length < newLength) {
-            newEffects[this.length - 1] = 0; 
-        }
-        // 新しいゴール地点の効果も0にする
-        newEffects[newLength - 1] = 0;
-
-        this.length = newLength;
-        this.effects = newEffects;
-    }
-
-    public int getEffect(int position) {
-        if (position >= 0 && position < length) {
-            return effects[position];
-        }
-        return 0;
-    }
-
-    public void setEffect(int position, int effect) {
-        if (position >= 0 && position < length) {
-            this.effects[position] = effect;
-        }
-    }
-
-    //v1.1で追加した
-    public String getEffectDescription(int position) {
-
-    int effect = getEffect(position);
-
-    if(effect > 0 && effect < 100)
-        return effect + "マス進む！";
-
-    if(effect < 0)
-        return Math.abs(effect) + "マス戻る！";
-
-    switch(effect){
-
-        case 100:
-            return "もう一回サイコロ！";
-
-        case 101:
-            return "次のターン休み！";
-
-        case 102:
-            return "スタートへ戻る！";
-
-        case 103:
-            return "ランダムワープ！";
-
-        default:
-            return "特に何もない。";
-        }
-    }
-
-    // 盤面データをCSVファイルに保存
-    public void saveToFile(String filename) throws IOException {
-        try (PrintWriter pw = new PrintWriter(new BufferedWriter(new FileWriter(filename)))) {
-            pw.println(length);
-            for (int i = 0; i < length; i++) {
-                pw.println(i + "," + effects[i]);
+    private void initGrid() {
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int r = rand.nextInt(10);
+                if (r < 4) grid[y][x] = 0;
+                else if (r < 7) grid[y][x] = 1;
+                else if (r < 9) grid[y][x] = 2;
+                else grid[y][x] = 3;
             }
         }
     }
 
-    // CSVファイルから盤面データを読み込み
+    // マス数を変更（エディタ用）
+    public void resize(int newWidth, int newHeight) {
+        int[][] newGrid = new int[newHeight][newWidth];
+        for (int y = 0; y < Math.min(this.height, newHeight); y++) {
+            for (int x = 0; x < Math.min(this.width, newWidth); x++) {
+                newGrid[y][x] = this.grid[y][x];
+            }
+        }
+        this.width = newWidth;
+        this.height = newHeight;
+        this.grid = newGrid;
+        relocateGoal();
+    }
+
+    public void relocateGoal() {
+        goalX = rand.nextInt(width);
+        goalY = rand.nextInt(height);
+    }
+
+    public int getWidth() { return width; }
+    public int getHeight() { return height; }
+    public int getTile(int x, int y) { return grid[y][x]; }
+    public void setTile(int x, int y, int type) { grid[y][x] = type; }
+    public int getGoalX() { return goalX; }
+    public int getGoalY() { return goalY; }
+
+    // CSVへ保存 (1行目に幅と高さ、2行目以降にカンマ区切りで配置データを保存)
+    public void saveToFile(String filename) throws IOException {
+        try (PrintWriter pw = new PrintWriter(new BufferedWriter(new FileWriter(filename)))) {
+            pw.println(width + "," + height);
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    pw.print(grid[y][x]);
+                    if (x < width - 1) pw.print(",");
+                }
+                pw.println();
+            }
+        }
+    }
+
+    // CSVから読込
     public void loadFromFile(String filename) throws IOException {
         try (BufferedReader br = new BufferedReader(new FileReader(filename))) {
             String line = br.readLine();
             if (line == null) throw new IOException("ファイルが空です。");
-            this.length = Integer.parseInt(line.trim());
-            this.effects = new int[length];
+            String[] dims = line.split(",");
+            this.width = Integer.parseInt(dims[0]);
+            this.height = Integer.parseInt(dims[1]);
+            this.grid = new int[height][width];
 
-            while ((line = br.readLine()) != null) {
-                line = line.trim();
-                if (line.isEmpty()) continue;
-                String[] tokens = line.split(",");
-                int index = Integer.parseInt(tokens[0]);
-                int effect = Integer.parseInt(tokens[1]);
-                if (index >= 0 && index < length) {
-                    effects[index] = effect;
+            for (int y = 0; y < height; y++) {
+                line = br.readLine();
+                if (line == null) break;
+                String[] tiles = line.split(",");
+                for (int x = 0; x < width; x++) {
+                    this.grid[y][x] = Integer.parseInt(tiles[x]);
                 }
             }
+            relocateGoal();
         }
     }
 }

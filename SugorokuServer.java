@@ -1,3 +1,5 @@
+//v2.0
+
 import java.io.*;
 import java.net.*;
 import java.util.*;
@@ -6,194 +8,118 @@ public class SugorokuServer {
     private static final int MAX_PLAYERS = 2;
 
     public static void main(String[] args) throws IOException {
-        if (args.length < 1) {
-            System.out.println("使用法: java SugorokuServer <ポート番号> [盤面CSVファイル名]");
-            System.exit(1);
-        }
-
         int port = Integer.parseInt(args[0]);
         
+        // 1. 引数にCSVがあれば読み込む
         Board board;
         if (args.length >= 2) {
             try {
                 board = new Board(args[1]);
-                System.out.println("自作盤面ファイルを読み込みました: " + args[1]);
+                System.out.println("自作盤面を読み込みました: " + args[1]);
             } catch (IOException e) {
-                System.out.println("ファイルの読み込みに失敗したため、デフォルト盤面で起動します: " + e.getMessage());
-                board = new Board(20);
+                System.out.println("読込失敗。デフォルト盤面で起動します。");
+                board = new Board(10, 10);
             }
         } else {
-            board = new Board(20);
-            System.out.println("デフォルトの20マス盤面で起動します。");
+            board = new Board(10, 10);
         }
 
         ServerSocket serverSocket = new ServerSocket(port);
-        System.out.println("サーバー起動 (ポート:" + port + ")");
-        System.out.println(MAX_PLAYERS + "人のプレイヤーを待機中...");
+        System.out.println("サーバー起動 (ポート:" + port + ") プレイヤー待機中...");
 
         List<Player> players = new ArrayList<>();
         for (int i = 1; i <= MAX_PLAYERS; i++) {
-            Socket socket = serverSocket.accept();
-            Player p = new Player(i, socket);
+            Player p = new Player(i, serverSocket.accept());
             players.add(p);
-            System.out.println(p.getName() + " が接続しました。");
-            p.sendMessage("MSG サーバーに接続しました。他のプレイヤーを待っています...");
+            p.sendMessage("MSG サーバーに接続しました。");
         }
 
-        // 【修正】各クライアントに自分のIDと、「盤面の構成データ」を送信する
         for (int i = 0; i < players.size(); i++) {
-            Player p = players.get(i);
-            p.sendMessage("INIT " + (i + 1));
-            
-            // 盤面データ（マス数と全マスの効果）をカンマ区切りの文字列にして送信
-            StringBuilder bd = new StringBuilder("BOARD_INIT " + board.getLength() + " ");
-            for (int j = 0; j < board.getLength(); j++) {
-                bd.append(board.getEffect(j));
-                if (j < board.getLength() - 1) bd.append(",");
+            players.get(i).sendMessage("INIT " + (i + 1));
+            StringBuilder bd = new StringBuilder("BOARD_INIT " + board.getWidth() + " " + board.getHeight() + " ");
+            for (int y = 0; y < board.getHeight(); y++) {
+                for (int x = 0; x < board.getWidth(); x++) {
+                    bd.append(board.getTile(x, y)).append(",");
+                }
             }
-            p.sendMessage(bd.toString());
+            players.get(i).sendMessage(bd.toString());
         }
 
-        broadcast(players, "MSG ===================================");
-        broadcast(players, "MSG 全員揃いました！すごろく対戦スタート！");
-        broadcast(players, "MSG ===================================");
-
+        broadcast(players, "MSG 対戦スタート！目的地を目指せ！");
         Random random = new Random();
         int turn = 1;
-        boolean isGameOver = false;
 
-        while (!isGameOver) {
-            broadcast(players, "MSG \n--- 【ターン " + turn + "】 ---");
+        while (true) {
+            broadcast(players, "MSG \n--- 【決算ターン " + turn + "】 ---");
             
-            for (int i = 0; i < players.size(); i++) {
-                Player current = players.get(i);
-
-                // ★追加
-                if(current.isSkipTurn()){
-                    broadcast(players,
-                        "MSG " + current.getName() + " は1回休みです。");
-
-                    current.setSkipTurn(false);
-                    continue;
-                }
-
+            for (Player current : players) {
                 broadcastState(players, turn, board);
                 broadcast(players, "MSG ▶ " + current.getName() + " の番です。");
                 current.sendMessage("YOUR_TURN");
                 
-                try {
-                    String cmd = current.receiveMessage();
-                    if (cmd == null || !cmd.equals("ROLL")) {
-                        isGameOver = true; break;
+                String cmd = current.receiveMessage();
+                int dice = 0;
+                if (cmd.equals("ITEM") && current.getItems() > 0) {
+                    current.addItems(-1);
+                    dice = random.nextInt(6) + 1 + random.nextInt(6) + 1;
+                    broadcast(players, "MSG " + current.getName() + " は【特急カード】を使った！");
+                } else {
+                    dice = random.nextInt(6) + 1;
+                }
+                broadcast(players, "MSG 🎲 出目: 【" + dice + "】");
+
+                // 2. 移動処理（ここではゴール判定はしない。通過を許容する）
+                int steps = dice;
+                while (steps > 0) {
+                    current.sendMessage("CHOOSE_DIR " + steps);
+                    String dir = current.receiveMessage();
+                    
+                    int nx = current.getX();
+                    int ny = current.getY();
+                    if (dir.equals("UP")) ny--;
+                    else if (dir.equals("DOWN")) ny++;
+                    else if (dir.equals("LEFT")) nx--;
+                    else if (dir.equals("RIGHT")) nx++;
+                    
+                    if (nx >= 0 && nx < board.getWidth() && ny >= 0 && ny < board.getHeight()) {
+                        current.setX(nx);
+                        current.setY(ny);
+                        steps--;
+                        broadcastState(players, turn, board);
+                    } else {
+                        // 画面外への進行は無効化（歩数は消費されない）
+                        current.sendMessage("MSG ⚠️ そちらには進めません！");
                     }
-                } catch (IOException e) {
-                    isGameOver = true; break;
                 }
 
-                int dice = random.nextInt(6) + 1;
-                broadcast(players, "MSG " + current.getPosition() + " にいる " + current.getName() + " は 【" + dice + "】 の目を出した！");
-                
-                int newPos = current.getPosition() + dice;
-                if (newPos >= board.getLength() - 1) {
-                    newPos = board.getLength() - 1;
+                // 3. 移動終了後（停止時）のピッタリ判定とマスの効果発動
+                if (current.getX() == board.getGoalX() && current.getY() == board.getGoalY()) {
+                    broadcast(players, "MSG 🎉🎉 " + current.getName() + " が目的地に【ピッタリ】到着！ 援助金 10000円を獲得！ 🎉🎉");
+                    current.addMoney(10000);
+                    board.relocateGoal(); // 新しい目的地へ
+                } else {
+                    int tile = board.getTile(current.getX(), current.getY());
+                    if (tile == 1) {
+                        int gain = (random.nextInt(5) + 1) * 1000;
+                        current.addMoney(gain);
+                        broadcast(players, "MSG 🔵 青マス: " + gain + "円 獲得！");
+                    } else if (tile == 2) {
+                        int loss = (random.nextInt(5) + 1) * 1000;
+                        current.addMoney(-loss);
+                        broadcast(players, "MSG 🔴 赤マス: " + loss + "円 失った...");
+                    } else if (tile == 3) {
+                        current.addItems(1);
+                        broadcast(players, "MSG 🟡 黄マス: 【特急カード(サイコロ2個)】を拾った！");
+                    } else {
+                        broadcast(players, "MSG ⚪ 白マス: 特に何も起きなかった。");
+                    }
                 }
-                current.setPosition(newPos);
+                
                 broadcastState(players, turn, board);
-
-                if (checkGoal(players, current, board.getLength())) {
-                    isGameOver = true; break;
-                }
-
-                int effect = board.getEffect(current.getPosition());
-
-                if(effect != 0){
-                
-                    broadcast(players,
-                        "MSG 止まったマス: "
-                        + board.getEffectDescription(current.getPosition()));
-                
-                    // 普通の進む・戻る
-                    if(effect > -100 && effect < 100){
-                
-                        newPos = current.getPosition() + effect;
-                
-                        if(newPos < 0)
-                            newPos = 0;
-                
-                        if(newPos >= board.getLength()-1)
-                            newPos = board.getLength()-1;
-                
-                        current.setPosition(newPos);
-                    }
-                
-                    else{
-                
-                        switch(effect){
-                
-                            case 100:
-                
-                                broadcast(players,
-                                    "MSG もう一度サイコロを振れます！");
-                
-                                i--;
-                                break;
-                
-                            case 101:
-                
-                                current.setSkipTurn(true);
-                
-                                broadcast(players,
-                                    "MSG 次のターンは休みになります。");
-                
-                                break;
-                
-                            case 102:
-
-                                current.setPosition(0);
-                                
-                                broadcast(players,
-                                "MSG "+current.getName()+" はスタートへ戻った！");
-                
-                            case 103:
-
-                                int randomPos = random.nextInt(board.getLength() - 1);
-                            
-                                current.setPosition(randomPos);
-                            
-                                broadcast(players,
-                                    "MSG " + current.getName() + " はランダムワープした！");
-                            
-                                break;
-                        }
-                    }
-                
-                    try {
-                        Thread.sleep(800);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                
-                    broadcastState(players, turn, board);
-                
-                    if(checkGoal(players,current,board.getLength())){
-                        isGameOver=true;
-                        break;
-                    }
-                }
-
-                broadcast(players, "MSG " + current.getName() + " は現在 [マス " + current.getPosition() + "] にいます。\n");
                 try { Thread.sleep(1000); } catch(InterruptedException e){}
             }
-            if (isGameOver) break;
             turn++;
         }
-
-        broadcastState(players, turn, board);
-        broadcast(players, "MSG ゲーム終了！お疲れ様でした。");
-        broadcast(players, "END");
-
-        for (Player p : players) p.close();
-        serverSocket.close();
     }
 
     private static void broadcast(List<Player> players, String msg) {
@@ -201,17 +127,12 @@ public class SugorokuServer {
     }
 
     private static void broadcastState(List<Player> players, int turn, Board board) {
-        int p1Pos = players.get(0).getPosition();
-        int p2Pos = players.get(1).getPosition();
-        String stateMsg = "UPDATE " + turn + " " + p1Pos + " " + p2Pos;
-        broadcast(players, stateMsg);
-    }
-
-    private static boolean checkGoal(List<Player> players, Player player, int boardLength) {
-        if (player.getPosition() >= boardLength - 1) {
-            broadcast(players, "MSG \n🎉🎉🎉 " + player.getName() + " がゴールに到達しました！ 🎉🎉🎉");
-            return true;
-        }
-        return false;
+        Player p1 = players.get(0);
+        Player p2 = players.get(1);
+        String state = String.format("UPDATE %d %d %d %d %d %d %d %d %d %d %d",
+            turn, p1.getX(), p1.getY(), p1.getMoney(), p1.getItems(),
+            p2.getX(), p2.getY(), p2.getMoney(), p2.getItems(),
+            board.getGoalX(), board.getGoalY());
+        broadcast(players, state);
     }
 }
