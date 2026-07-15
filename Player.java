@@ -1,4 +1,4 @@
-//v2.0
+//v2.3
 
 import java.io.*;
 import java.net.Socket;
@@ -30,6 +30,7 @@ public class Player {
     public void setY(int y) { this.y = y; }
     public int getMoney() { return money; }
     public void addMoney(int amount) { this.money += amount; }
+    public boolean isInDebt() { return money < 0; }
     public int getItems() { return items; }
     public void addItems(int amount) { this.items += amount; }
 

@@ -1,4 +1,4 @@
-//v2.0
+//v2.3
 
 import java.io.*;
 import java.util.Random;
@@ -6,7 +6,7 @@ import java.util.Random;
 public class Board {
     private int width;
     private int height;
-    private int[][] grid; // 0:白(通常), 1:青(プラス), 2:赤(マイナス), 3:黄(アイテム)
+    private int[][] grid; // 0:白(通常), 1:青(プラス), 2:赤(マイナス), 3:黄(アイテム), 4:紫(貧乏神)
     private int goalX;
     private int goalY;
     private Random rand = new Random();
@@ -28,11 +28,12 @@ public class Board {
     private void initGrid() {
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
-                int r = rand.nextInt(10);
-                if (r < 4) grid[y][x] = 0;
-                else if (r < 7) grid[y][x] = 1;
-                else if (r < 9) grid[y][x] = 2;
-                else grid[y][x] = 3;
+                int r = rand.nextInt(15);
+                if (r < 6) grid[y][x] = 0;
+                else if (r < 10) grid[y][x] = 1;
+                else if (r < 12) grid[y][x] = 2;
+                else if (r < 13) grid[y][x] = 3;
+                else grid[y][x] = 4;
             }
         }
     }

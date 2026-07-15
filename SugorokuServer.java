@@ -1,21 +1,31 @@
-//v2.0
+//v2.3
 
 import java.io.*;
 import java.net.*;
 import java.util.*;
 
 public class SugorokuServer {
-    private static final int MAX_PLAYERS = 2;
+    private static final int DEFAULT_PLAYERS = 2;
+    private static final int DEFAULT_TURN_LIMIT = 20;
+    private static final double DEBT_INTEREST_RATE = 0.1;   // 借金の利息(10%/ターン)
+    private static final double POVERTY_STEAL_RATE = 0.3;   // 貧乏神が奪う割合(30%)
 
     public static void main(String[] args) throws IOException {
         int port = Integer.parseInt(args[0]);
-        
+        int maxPlayers = args.length >= 2 ? Integer.parseInt(args[1]) : DEFAULT_PLAYERS;
+        int turnLimit = args.length >= 3 && !args[2].toLowerCase().endsWith(".csv")
+                ? Integer.parseInt(args[2]) : DEFAULT_TURN_LIMIT;
+        String boardFile = null;
+        for (String a : args) {
+            if (a.toLowerCase().endsWith(".csv")) boardFile = a;
+        }
+
         // 1. 引数にCSVがあれば読み込む
         Board board;
-        if (args.length >= 2) {
+        if (boardFile != null) {
             try {
-                board = new Board(args[1]);
-                System.out.println("自作盤面を読み込みました: " + args[1]);
+                board = new Board(boardFile);
+                System.out.println("自作盤面を読み込みました: " + boardFile);
             } catch (IOException e) {
                 System.out.println("読込失敗。デフォルト盤面で起動します。");
                 board = new Board(10, 10);
@@ -25,10 +35,10 @@ public class SugorokuServer {
         }
 
         ServerSocket serverSocket = new ServerSocket(port);
-        System.out.println("サーバー起動 (ポート:" + port + ") プレイヤー待機中...");
+        System.out.println("サーバー起動 (ポート:" + port + ") プレイヤー" + maxPlayers + "人待機中...");
 
         List<Player> players = new ArrayList<>();
-        for (int i = 1; i <= MAX_PLAYERS; i++) {
+        for (int i = 1; i <= maxPlayers; i++) {
             Player p = new Player(i, serverSocket.accept());
             players.add(p);
             p.sendMessage("MSG サーバーに接続しました。");
@@ -45,21 +55,29 @@ public class SugorokuServer {
             players.get(i).sendMessage(bd.toString());
         }
 
-        broadcast(players, "MSG 対戦スタート！目的地を目指せ！");
+        broadcast(players, "MSG 対戦スタート！目的地を目指せ！ (全 " + turnLimit + " 期で決算)");
         Random random = new Random();
-        int turn = 1;
 
-        while (true) {
+        for (int turn = 1; turn <= turnLimit; turn++) {
             broadcast(players, "MSG \n--- 【決算ターン " + turn + "】 ---");
-            
+
             for (Player current : players) {
                 broadcastState(players, turn, board);
                 broadcast(players, "MSG ▶ " + current.getName() + " の番です。");
+
+                // 借金中は毎ターン利息が発生する
+                if (current.isInDebt()) {
+                    int interest = (int) Math.ceil(-current.getMoney() * DEBT_INTEREST_RATE);
+                    current.addMoney(-interest);
+                    broadcast(players, "MSG 💸 " + current.getName() + " は借金中！ 利息 " + interest
+                            + "円が加算された...(借金残高 " + (-current.getMoney()) + "円)");
+                }
+
                 current.sendMessage("YOUR_TURN");
-                
+
                 String cmd = current.receiveMessage();
                 int dice = 0;
-                if (cmd.equals("ITEM") && current.getItems() > 0) {
+                if (cmd.equals("ITEM") && current.getItems() > 0 && !current.isInDebt()) {
                     current.addItems(-1);
                     dice = random.nextInt(6) + 1 + random.nextInt(6) + 1;
                     broadcast(players, "MSG " + current.getName() + " は【特急カード】を使った！");
@@ -77,14 +95,14 @@ public class SugorokuServer {
                 while (steps > 0) {
                     current.sendMessage("CHOOSE_DIR " + steps);
                     String dir = current.receiveMessage();
-                    
+
                     int nx = current.getX();
                     int ny = current.getY();
                     if (dir.equals("UP")) ny--;
                     else if (dir.equals("DOWN")) ny++;
                     else if (dir.equals("LEFT")) nx--;
                     else if (dir.equals("RIGHT")) nx++;
-                    
+
                     if (nx >= 0 && nx < board.getWidth() && ny >= 0 && ny < board.getHeight()) {
                         current.setX(nx);
                         current.setY(ny);
@@ -114,16 +132,63 @@ public class SugorokuServer {
                     } else if (tile == 3) {
                         current.addItems(1);
                         broadcast(players, "MSG 🟡 黄マス: 【特急カード(サイコロ2個)】を拾った！");
+                    } else if (tile == 4) {
+                        applyPovertyGod(players, current, random);
                     } else {
                         broadcast(players, "MSG ⚪ 白マス: 特に何も起きなかった。");
                     }
                 }
-                
+
                 broadcastState(players, turn, board);
                 try { Thread.sleep(1000); } catch(InterruptedException e){}
             }
-            turn++;
         }
+
+        announceRanking(players);
+        for (Player p : players) p.close();
+    }
+
+    // 🟣 紫マス：貧乏神が現れ、最も裕福な他プレイヤーからお金を奪い、位置を入れ替える
+    private static void applyPovertyGod(List<Player> players, Player current, Random random) {
+        Player target = null;
+        for (Player p : players) {
+            if (p == current) continue;
+            if (target == null || p.getMoney() > target.getMoney()) target = p;
+        }
+
+        if (target == null || target.getMoney() <= 0) {
+            broadcast(players, "MSG 🟣 貧乏神が現れたが、奪えるお金を持つ相手はいなかった...");
+            return;
+        }
+
+        int steal = (int) Math.ceil(target.getMoney() * POVERTY_STEAL_RATE);
+        target.addMoney(-steal);
+        current.addMoney(steal);
+
+        int tx = target.getX(), ty = target.getY();
+        target.setX(current.getX()); target.setY(current.getY());
+        current.setX(tx); current.setY(ty);
+
+        broadcast(players, "MSG 🟣 貧乏神が現れた！ " + current.getName() + " は " + target.getName()
+                + " から " + steal + "円 奪い、位置を入れ替えた！");
+    }
+
+    private static void announceRanking(List<Player> players) {
+        List<Player> ranked = new ArrayList<>(players);
+        ranked.sort((a, b) -> b.getMoney() - a.getMoney());
+
+        StringBuilder sb = new StringBuilder("GAMEOVER ");
+        for (int i = 0; i < ranked.size(); i++) {
+            Player p = ranked.get(i);
+            if (i > 0) sb.append(",");
+            sb.append(p.getName()).append(":").append(p.getMoney());
+        }
+        broadcast(players, "MSG \n=== 【最終決算】 ===");
+        for (int i = 0; i < ranked.size(); i++) {
+            Player p = ranked.get(i);
+            broadcast(players, "MSG " + (i + 1) + "位: " + p.getName() + " (" + p.getMoney() + "円)");
+        }
+        broadcast(players, sb.toString());
     }
 
     private static void broadcast(List<Player> players, String msg) {
@@ -131,12 +196,14 @@ public class SugorokuServer {
     }
 
     private static void broadcastState(List<Player> players, int turn, Board board) {
-        Player p1 = players.get(0);
-        Player p2 = players.get(1);
-        String state = String.format("UPDATE %d %d %d %d %d %d %d %d %d %d %d",
-            turn, p1.getX(), p1.getY(), p1.getMoney(), p1.getItems(),
-            p2.getX(), p2.getY(), p2.getMoney(), p2.getItems(),
-            board.getGoalX(), board.getGoalY());
-        broadcast(players, state);
+        StringBuilder sb = new StringBuilder();
+        sb.append("UPDATE ").append(turn).append(" ").append(players.size());
+        for (Player p : players) {
+            sb.append(" ").append(p.getX()).append(" ").append(p.getY())
+              .append(" ").append(p.getMoney()).append(" ").append(p.getItems())
+              .append(" ").append(p.isInDebt() ? 1 : 0);
+        }
+        sb.append(" ").append(board.getGoalX()).append(" ").append(board.getGoalY());
+        broadcast(players, sb.toString());
     }
 }

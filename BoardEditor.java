@@ -1,4 +1,4 @@
-//v2.0
+//v2.3
 
 import javax.swing.*;
 import java.awt.*;
@@ -23,7 +23,7 @@ public class BoardEditor extends JFrame {
         JButton saveButton = new JButton("💾 CSV保存");
         JButton loadButton = new JButton("📂 CSV読込");
         JButton resizeButton = new JButton("⚙ サイズ変更");
-        statusLabel = new JLabel("マスをクリックで変更 (白:通常 青:プラス 赤:マイナス 黄:アイテム)");
+        statusLabel = new JLabel("マスをクリックで変更 (白:通常 青:プラス 赤:マイナス 黄:アイテム 紫:貧乏神)");
         
         menuPanel.add(saveButton);
         menuPanel.add(loadButton);
@@ -90,10 +90,10 @@ public class BoardEditor extends JFrame {
                 JButton btn = new JButton();
                 updateButtonAppearance(btn, board.getTile(fx, fy));
                 
-                // クリックでマスの種類を 0→1→2→3→0 とローテーションさせる
+                // クリックでマスの種類を 0→1→2→3→4→0 とローテーションさせる
                 btn.addActionListener(e -> {
                     int currentType = board.getTile(fx, fy);
-                    int nextType = (currentType + 1) % 4;
+                    int nextType = (currentType + 1) % 5;
                     board.setTile(fx, fy, nextType);
                     updateButtonAppearance(btn, nextType);
                 });
@@ -112,6 +112,7 @@ public class BoardEditor extends JFrame {
         else if (type == 1) { btn.setBackground(new Color(150, 200, 255)); btn.setText("青"); }
         else if (type == 2) { btn.setBackground(new Color(255, 150, 150)); btn.setText("赤"); }
         else if (type == 3) { btn.setBackground(new Color(255, 230, 100)); btn.setText("黄"); }
+        else if (type == 4) { btn.setBackground(new Color(180, 130, 220)); btn.setText("紫"); }
     }
 
     public static void main(String[] args) {
