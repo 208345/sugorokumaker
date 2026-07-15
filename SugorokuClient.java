@@ -2,6 +2,7 @@
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.*;
 import java.io.*;
 import java.net.*;
 import java.awt.image.BufferedImage;
@@ -23,11 +24,15 @@ public class SugorokuClient extends JFrame {
     private JTextArea logArea;
 
     private JButton btnRoll, btnItem, btnUp, btnDown, btnLeft, btnRight;
+    private JLabel turnIndicator;
     private Socket socket;
     private BufferedReader in;
     private PrintWriter out;
     private DicePanel dicePanel;
     private int diceValue = 1;
+    private Timer diceTimer;
+    private int rollCount;
+    private int finalDiceValue;
 
     private Image moneyImg;
     private Image cardImg;
@@ -48,18 +53,36 @@ public class SugorokuClient extends JFrame {
 
         JPanel bottomPanel = new JPanel(new BorderLayout());
 
-        JPanel actionPanel = new JPanel(new GridLayout(2, 1, 5, 5));
-        btnRoll = new JButton("🎲 サイコロを振る");
-        btnItem = new JButton("🃏 特急カードを使う");
+        turnIndicator = new JLabel("待機中...", SwingConstants.CENTER) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(getBackground());
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 15, 15);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        turnIndicator.setOpaque(false);
+        turnIndicator.setBackground(Color.LIGHT_GRAY);
+        turnIndicator.setForeground(Color.WHITE);
+        turnIndicator.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 16));
+
+        JPanel actionPanel = new JPanel(new GridLayout(3, 1, 5, 5));
+        btnRoll = new RoundedButton("🎲 サイコロを振る");
+        btnItem = new RoundedButton("🃏 特急カードを使う");
         btnRoll.setEnabled(false); btnItem.setEnabled(false);
 
         btnRoll.addActionListener(e -> sendCommand("ROLL"));
         btnItem.addActionListener(e -> sendCommand("ITEM"));
-        actionPanel.add(btnRoll); actionPanel.add(btnItem);
+        actionPanel.add(btnRoll); 
+        actionPanel.add(btnItem);
+        actionPanel.add(turnIndicator);
 
         JPanel movePanel = new JPanel(new BorderLayout());
-        btnUp = new JButton("↑"); btnDown = new JButton("↓");
-        btnLeft = new JButton("←"); btnRight = new JButton("→");
+        btnUp = new RoundedButton("↑"); btnDown = new RoundedButton("↓");
+        btnLeft = new RoundedButton("←"); btnRight = new RoundedButton("→");
         setMoveButtonsEnabled(false);
 
         dicePanel = new DicePanel();
@@ -84,7 +107,7 @@ public class SugorokuClient extends JFrame {
         movePanel.add(btnRight, BorderLayout.EAST);
         movePanel.add(new JLabel("移動", SwingConstants.CENTER), BorderLayout.CENTER);
 
-        JPanel controls = new JPanel(new FlowLayout());
+        JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 10));
         controls.add(actionPanel);
         controls.add(movePanel);
         controls.add(dicePanel);
@@ -163,10 +186,34 @@ public class SugorokuClient extends JFrame {
                         px = nx; py = ny; pmoney = nmoney; pitem = nitem; pdebt = ndebt;
 
                         SwingUtilities.invokeLater(() -> {
-                            StringBuilder sb = new StringBuilder(String.format("【第%d期】 自分:社長%d", currentTurn, myId));
-                            for (int i = 0; i < numPlayers; i++) {
-                                sb.append(String.format(" | P%d: %d円%s (ｶｰﾄﾞ%d)", i + 1, pmoney[i], pdebt[i] ? "(借金)" : "", pitem[i]));
+                            int maxMoney = Integer.MIN_VALUE;
+                            for (int m : pmoney) {
+                                if (m > maxMoney) maxMoney = m;
                             }
+                            int maxCount = 0;
+                            for (int m : pmoney) {
+                                if (m == maxMoney) maxCount++;
+                            }
+                            boolean isTie = (maxCount > 1);
+
+                            StringBuilder sb = new StringBuilder(String.format("<html>【第%d期】 自分:社長%d", currentTurn, myId));
+                            for (int i = 0; i < numPlayers; i++) {
+                                String color = "black";
+                                String prefix = "";
+                                String suffix = "";
+
+                                if (!isTie && pmoney[i] == maxMoney) {
+                                    color = "#ff8c00"; // Orange
+                                    if (i == 0) {
+                                        prefix = "👑Winning! ";
+                                    } else {
+                                        suffix = " 👑Winning!";
+                                    }
+                                }
+
+                                sb.append(String.format(" | <font color='%s'>%sP%d: %d円%s (ｶｰﾄﾞ%d)%s</font>", color, prefix, i + 1, pmoney[i], pdebt[i] ? "(借金)" : "", pitem[i], suffix));
+                            }
+                            sb.append("</html>");
                             infoLabel.setText(sb.toString());
                             boardPanel.repaint();
                         });
@@ -176,10 +223,24 @@ public class SugorokuClient extends JFrame {
                         SwingUtilities.invokeLater(() -> {
                             logArea.append(msg + "\n");
                             logArea.setCaretPosition(logArea.getDocument().getLength());
+
+                            if (msg.startsWith("▶ ")) {
+                                int endIdx = msg.indexOf(" の番");
+                                if (endIdx != -1) {
+                                    String activePlayer = msg.substring(2, endIdx);
+                                    if (!activePlayer.equals("社長" + myId)) {
+                                        turnIndicator.setText(activePlayer + "のターン");
+                                        turnIndicator.setBackground(Color.GRAY);
+                                    }
+                                }
+                            }
                         });
                     }
                     else if (line.equals("YOUR_TURN")) {
                         SwingUtilities.invokeLater(() -> {
+                            turnIndicator.setText("あなたのターン");
+                            turnIndicator.setBackground(new Color(220, 50, 50));
+                            
                             btnRoll.setEnabled(true);
                             int idx = myId - 1;
                             if (idx >= 0 && idx < numPlayers && pitem[idx] > 0) {
@@ -331,7 +392,6 @@ public class SugorokuClient extends JFrame {
                         drawPovertyIcon(g2, ix, iy, iconSize);
                     } else if (tile == 5) {
                         g2.setColor(new Color(30, 80, 30));
-                        // 【変更点】文字化け対策のため Arial から SansSerif に変更
                         g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, cellW / 4));
                         String sName = board.getStationName(x, y);
                         FontMetrics fm = g2.getFontMetrics();
@@ -349,22 +409,21 @@ public class SugorokuClient extends JFrame {
                 g2.setColor(c);
                 g2.fillOval(px[i] * cellW + offsetX, py[i] * cellH + offsetY, pSize, pSize);
                 g2.setColor(Color.WHITE);
-                // 【変更点】文字化け対策のため Arial から SansSerif に変更
                 g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
                 g2.drawString("P" + (i + 1), px[i] * cellW + offsetX + 2, py[i] * cellH + offsetY + pSize - 3);
             }
         }
-    }
 
-    private void drawPovertyIcon(Graphics2D g2, int x, int y, int size) {
-        Color prevColor = g2.getColor();
-        g2.setColor(new Color(90, 40, 120)); g2.fillOval(x, y, size, size);
-        g2.setColor(Color.WHITE); int eyeSize = size / 6;
-        g2.fillOval(x + size / 4 - eyeSize / 2, y + size / 3, eyeSize, eyeSize);
-        g2.fillOval(x + size * 3 / 4 - eyeSize / 2, y + size / 3, eyeSize, eyeSize);
-        g2.setColor(Color.WHITE); g2.setStroke(new BasicStroke(2f));
-        g2.drawArc(x + size / 4, y + size * 3 / 5, size / 2, size / 4, 200, 140);
-        g2.setColor(prevColor);
+        private void drawPovertyIcon(Graphics2D g2, int x, int y, int size) {
+            Color prevColor = g2.getColor();
+            g2.setColor(new Color(90, 40, 120)); g2.fillOval(x, y, size, size);
+            g2.setColor(Color.WHITE); int eyeSize = size / 6;
+            g2.fillOval(x + size / 4 - eyeSize / 2, y + size / 3, eyeSize, eyeSize);
+            g2.fillOval(x + size * 3 / 4 - eyeSize / 2, y + size / 3, eyeSize, eyeSize);
+            g2.setColor(Color.WHITE); g2.setStroke(new BasicStroke(2f));
+            g2.drawArc(x + size / 4, y + size * 3 / 5, size / 2, size / 4, 200, 140);
+            g2.setColor(prevColor);
+        }
     }
 
     private class DicePanel extends JPanel {
@@ -395,7 +454,33 @@ public class SugorokuClient extends JFrame {
         }
     }
 
-    private void showDice(int n) { diceValue = n; dicePanel.repaint(); }
+    private void showDice(int n) {
+        finalDiceValue = n;
+        rollCount = 0;
+
+        if (diceTimer != null && diceTimer.isRunning()) {
+            diceTimer.stop();
+        }
+
+        diceTimer = new Timer(50, null);
+        diceTimer.addActionListener(e -> {
+            rollCount++;
+            diceValue = (int)(Math.random() * 6) + 1;
+            dicePanel.repaint();
+
+            // 回転が後半になるにつれて徐々に遅くなる演出でハラハラ感を出す
+            if (rollCount > 30) {
+                diceTimer.setDelay(diceTimer.getDelay() + 15);
+            }
+
+            if (rollCount > 45) {
+                diceTimer.stop();
+                diceValue = finalDiceValue;
+                dicePanel.repaint();
+            }
+        });
+        diceTimer.start();
+    }
 
     private BufferedImage makeWhiteTransparent(BufferedImage image) {
         BufferedImage result = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_ARGB);
@@ -407,6 +492,64 @@ public class SugorokuClient extends JFrame {
             }
         }
         return result;
+    }
+
+    // 丸みを帯びたホバー対応のカスタムボタンクラス
+    private class RoundedButton extends JButton {
+        private boolean isHovered = false;
+
+        public RoundedButton(String text) {
+            super(text);
+            setContentAreaFilled(false);
+            setFocusPainted(false);
+            setBackground(new Color(240, 240, 240));
+            setBorderPainted(false);
+
+            addMouseListener(new MouseAdapter() {
+                @Override
+                public void mouseEntered(MouseEvent e) {
+                    if (isEnabled()) {
+                        isHovered = true;
+                        repaint();
+                    }
+                }
+
+                @Override
+                public void mouseExited(MouseEvent e) {
+                    isHovered = false;
+                    repaint();
+                }
+            });
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            
+            if (getModel().isArmed()) {
+                g2.setColor(new Color(200, 200, 200)); // クリック時
+            } else if (!isEnabled()) {
+                g2.setColor(new Color(220, 220, 220)); // 無効時
+            } else if (isHovered) {
+                g2.setColor(new Color(215, 225, 235)); // ホバー時（少し青みがかった濃い色）
+            } else {
+                g2.setColor(getBackground()); // 通常時
+            }
+            
+            g2.fillRoundRect(0, 0, getWidth(), getHeight(), 15, 15);
+            g2.dispose();
+            super.paintComponent(g);
+        }
+
+        @Override
+        protected void paintBorder(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(Color.GRAY);
+            g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 15, 15);
+            g2.dispose();
+        }
     }
 
     public static void main(String[] args) {
