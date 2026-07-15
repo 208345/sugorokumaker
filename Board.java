@@ -1,17 +1,20 @@
-//v2.3
+//v2.4
 
 import java.io.*;
-import java.util.Random;
+import java.util.*;
 
 public class Board {
     private int width;
     private int height;
-    private int[][] grid; // 0:白(通常), 1:青(プラス), 2:赤(マイナス), 3:黄(アイテム), 4:紫(貧乏神)
+    private int[][] grid; // 0:白, 1:青, 2:赤, 3:黄, 4:紫(貧乏神), 5:緑(物件)
+    private Map<String, String> stationNames = new HashMap<>(); // "x,y" -> "駅名"
     private int goalX;
     private int goalY;
     private Random rand = new Random();
 
-    // 新規作成用のコンストラクタ
+    // デフォルトの地名リスト
+    private static final String[] DEFAULT_STATIONS = {"新宿", "池袋", "八王子", "早稲田", "渋谷", "品川", "東京", "秋葉原", "上野", "横浜", "立川", "吉祥寺"};
+
     public Board(int width, int height) {
         this.width = width;
         this.height = height;
@@ -20,25 +23,29 @@ public class Board {
         relocateGoal();
     }
 
-    // CSVから読み込むコンストラクタ
     public Board(String filename) throws IOException {
         loadFromFile(filename);
     }
 
     private void initGrid() {
+        int stationIdx = 0;
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
-                int r = rand.nextInt(15);
+                int r = rand.nextInt(20);
                 if (r < 6) grid[y][x] = 0;
                 else if (r < 10) grid[y][x] = 1;
                 else if (r < 12) grid[y][x] = 2;
                 else if (r < 13) grid[y][x] = 3;
-                else grid[y][x] = 4;
+                else if (r < 14) grid[y][x] = 4;
+                else {
+                    grid[y][x] = 5; // 物件マス
+                    stationNames.put(x + "," + y, DEFAULT_STATIONS[stationIdx % DEFAULT_STATIONS.length]);
+                    stationIdx++;
+                }
             }
         }
     }
 
-    // マス数を変更（エディタ用）
     public void resize(int newWidth, int newHeight) {
         int[][] newGrid = new int[newHeight][newWidth];
         for (int y = 0; y < Math.min(this.height, newHeight); y++) {
@@ -63,8 +70,14 @@ public class Board {
     public void setTile(int x, int y, int type) { grid[y][x] = type; }
     public int getGoalX() { return goalX; }
     public int getGoalY() { return goalY; }
+    
+    public String getStationName(int x, int y) {
+        return stationNames.getOrDefault(x + "," + y, "名無し駅");
+    }
+    public void setStationName(int x, int y, String name) {
+        stationNames.put(x + "," + y, name);
+    }
 
-    // CSVへ保存 (1行目に幅と高さ、2行目以降にカンマ区切りで配置データを保存)
     public void saveToFile(String filename) throws IOException {
         try (PrintWriter pw = new PrintWriter(new BufferedWriter(new FileWriter(filename)))) {
             pw.println(width + "," + height);
@@ -75,10 +88,13 @@ public class Board {
                 }
                 pw.println();
             }
+            // 駅名データの保存
+            for (Map.Entry<String, String> entry : stationNames.entrySet()) {
+                pw.println("STATION:" + entry.getKey() + ":" + entry.getValue());
+            }
         }
     }
 
-    // CSVから読込
     public void loadFromFile(String filename) throws IOException {
         try (BufferedReader br = new BufferedReader(new FileReader(filename))) {
             String line = br.readLine();
@@ -87,6 +103,7 @@ public class Board {
             this.width = Integer.parseInt(dims[0]);
             this.height = Integer.parseInt(dims[1]);
             this.grid = new int[height][width];
+            this.stationNames.clear();
 
             for (int y = 0; y < height; y++) {
                 line = br.readLine();
@@ -94,6 +111,15 @@ public class Board {
                 String[] tiles = line.split(",");
                 for (int x = 0; x < width; x++) {
                     this.grid[y][x] = Integer.parseInt(tiles[x]);
+                }
+            }
+            
+            while ((line = br.readLine()) != null) {
+                if (line.startsWith("STATION:")) {
+                    String[] parts = line.split(":");
+                    if (parts.length >= 3) {
+                        stationNames.put(parts[1], parts[2]);
+                    }
                 }
             }
             relocateGoal();

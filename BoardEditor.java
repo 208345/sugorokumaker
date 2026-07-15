@@ -1,8 +1,7 @@
-//v2.3
+//v2.4
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.*;
 import java.io.IOException;
 
 public class BoardEditor extends JFrame {
@@ -12,18 +11,18 @@ public class BoardEditor extends JFrame {
     private JLabel statusLabel;
 
     public BoardEditor() {
-        setTitle("2Dマップエディタ");
-        setSize(800, 600);
+        setTitle("2Dマップエディタ (物件対応版)");
+        setSize(850, 650);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
 
-        board = new Board(10, 10); // 初期サイズは10x10
+        board = new Board(10, 10);
 
         JPanel menuPanel = new JPanel();
         JButton saveButton = new JButton("💾 CSV保存");
         JButton loadButton = new JButton("📂 CSV読込");
         JButton resizeButton = new JButton("⚙ サイズ変更");
-        statusLabel = new JLabel("マスをクリックで変更 (白:通常 青:プラス 赤:マイナス 黄:アイテム 紫:貧乏神)");
+        statusLabel = new JLabel("クリックで変更 (白:通常 青:プラス 赤:マイナス 黄:カード 紫:貧乏神 緑:物件)");
         
         menuPanel.add(saveButton);
         menuPanel.add(loadButton);
@@ -37,15 +36,13 @@ public class BoardEditor extends JFrame {
         buildBoardUI();
 
         resizeButton.addActionListener(e -> {
-            String wStr = JOptionPane.showInputDialog(this, "新しい【横】のマス数を入力 (例: 10)", board.getWidth());
-            String hStr = JOptionPane.showInputDialog(this, "新しい【縦】のマス数を入力 (例: 10)", board.getHeight());
+            String wStr = JOptionPane.showInputDialog(this, "横のマス数を入力:", board.getWidth());
+            String hStr = JOptionPane.showInputDialog(this, "縦のマス数を入力:", board.getHeight());
             if (wStr != null && hStr != null) {
                 try {
                     board.resize(Integer.parseInt(wStr.trim()), Integer.parseInt(hStr.trim()));
                     buildBoardUI();
-                } catch (NumberFormatException ex) {
-                    JOptionPane.showMessageDialog(this, "数値を入力してください。");
-                }
+                } catch (NumberFormatException ex) {}
             }
         });
 
@@ -57,9 +54,7 @@ public class BoardEditor extends JFrame {
                     if (!filePath.toLowerCase().endsWith(".csv")) filePath += ".csv";
                     board.saveToFile(filePath);
                     JOptionPane.showMessageDialog(this, "保存しました:\n" + filePath);
-                } catch (IOException ex) {
-                    JOptionPane.showMessageDialog(this, "保存失敗: " + ex.getMessage());
-                }
+                } catch (IOException ex) {}
             }
         });
 
@@ -69,10 +64,7 @@ public class BoardEditor extends JFrame {
                 try {
                     board.loadFromFile(fileChooser.getSelectedFile().getAbsolutePath());
                     buildBoardUI();
-                    JOptionPane.showMessageDialog(this, "読み込みました。");
-                } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(this, "読込失敗。ファイル形式を確認してください。");
-                }
+                } catch (Exception ex) {}
             }
         });
     }
@@ -88,14 +80,20 @@ public class BoardEditor extends JFrame {
             for (int x = 0; x < w; x++) {
                 final int fx = x, fy = y;
                 JButton btn = new JButton();
-                updateButtonAppearance(btn, board.getTile(fx, fy));
+                updateButtonAppearance(btn, fx, fy);
                 
-                // クリックでマスの種類を 0→1→2→3→4→0 とローテーションさせる
                 btn.addActionListener(e -> {
                     int currentType = board.getTile(fx, fy);
-                    int nextType = (currentType + 1) % 5;
+                    int nextType = (currentType + 1) % 6;
                     board.setTile(fx, fy, nextType);
-                    updateButtonAppearance(btn, nextType);
+                    
+                    if (nextType == 5) {
+                        String stationName = JOptionPane.showInputDialog(this, "物件マスの駅名を入力してください:", board.getStationName(fx, fy));
+                        if (stationName != null && !stationName.isEmpty()) {
+                            board.setStationName(fx, fy, stationName);
+                        }
+                    }
+                    updateButtonAppearance(btn, fx, fy);
                 });
                 
                 massButtons[y][x] = btn;
@@ -106,13 +104,16 @@ public class BoardEditor extends JFrame {
         gridPanel.repaint();
     }
 
-    private void updateButtonAppearance(JButton btn, int type) {
-        btn.setFont(new Font("Arial", Font.BOLD, 12));
+    private void updateButtonAppearance(JButton btn, int x, int y) {
+        int type = board.getTile(x, y);
+        // 【変更点】文字化け対策のため Arial から SansSerif に変更
+        btn.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 11));
         if (type == 0) { btn.setBackground(Color.WHITE); btn.setText("白"); }
         else if (type == 1) { btn.setBackground(new Color(150, 200, 255)); btn.setText("青"); }
         else if (type == 2) { btn.setBackground(new Color(255, 150, 150)); btn.setText("赤"); }
         else if (type == 3) { btn.setBackground(new Color(255, 230, 100)); btn.setText("黄"); }
         else if (type == 4) { btn.setBackground(new Color(180, 130, 220)); btn.setText("紫"); }
+        else if (type == 5) { btn.setBackground(new Color(140, 230, 140)); btn.setText(board.getStationName(x, y)); }
     }
 
     public static void main(String[] args) {
