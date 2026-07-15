@@ -1,4 +1,4 @@
-//v2.4
+// v2.6
 
 import java.io.*;
 import java.net.Socket;
@@ -10,6 +10,7 @@ public class Player {
     private int y = 0;
     private int money = 10000;
     private int items = 0;
+    private int asset = 10000;
 
     private Socket socket;
     private BufferedReader in;
@@ -22,7 +23,6 @@ public class Player {
         setupStreams(socket);
     }
 
-    // 再接続用のメソッド
     public void reconnect(Socket newSocket) throws IOException {
         setupStreams(newSocket);
         this.connected = true;
@@ -40,11 +40,16 @@ public class Player {
     public void setX(int x) { this.x = x; }
     public int getY() { return y; }
     public void setY(int y) { this.y = y; }
+    
     public int getMoney() { return money; }
     public void addMoney(int amount) { this.money += amount; }
     public boolean isInDebt() { return money < 0; }
+    
     public int getItems() { return items; }
     public void addItems(int amount) { this.items += amount; }
+    
+    public int getAsset() { return asset; }
+    public void setAsset(int asset) { this.asset = asset; }
     
     public boolean isConnected() { return connected; }
 
@@ -58,12 +63,10 @@ public class Player {
         if (!connected) return null;
         try {
             String msg = in.readLine();
-            if (msg == null) {
-                connected = false; // クライアント側から切断された
-            }
+            if (msg == null) connected = false;
             return msg;
         } catch (IOException e) {
-            connected = false; // 通信エラーによる切断
+            connected = false;
             return null;
         }
     }
