@@ -1,4 +1,4 @@
-// v2.6
+// v2.7
 
 import javax.swing.*;
 import java.awt.*;
@@ -53,7 +53,7 @@ public class SugorokuClient extends JFrame {
     private Image moneyImg, cardImg, goalImg;
 
     public SugorokuClient(String host, int port) throws IOException {
-        setTitle("2D通信ボードゲーム - 総合アップデート版(v2.13)");
+        setTitle("2D通信ボードゲーム - 総合アップデート版(v2.14)");
         setSize(1100, 750); 
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
@@ -161,6 +161,41 @@ public class SugorokuClient extends JFrame {
                     if (line.startsWith("INIT ")) {
                         myId = Integer.parseInt(line.substring(5));
                     }
+                    // 🌟 追加：再接続時に複数人が切断されていた場合に送られてくる本人確認
+                    else if (line.startsWith("ASK_RECONNECT ")) {
+                        String[] parts = line.substring(14).split(",");
+                        List<String> optionList = new ArrayList<>();
+                        List<String> idList = new ArrayList<>();
+                        
+                        for (String part : parts) {
+                            if (part.isEmpty()) continue;
+                            String[] kv = part.split(":");
+                            idList.add(kv[0]);
+                            optionList.add(kv[1]);
+                        }
+                        
+                        String[] options = optionList.toArray(new String[0]);
+                        String[] ids = idList.toArray(new String[0]);
+
+                        SwingUtilities.invokeLater(() -> {
+                            String selected = (String) JOptionPane.showInputDialog(
+                                SugorokuClient.this, 
+                                "複数人が切断されています。\nあなたはどのプレイヤーとして復帰しますか？", 
+                                "プレイヤーの選択", 
+                                JOptionPane.QUESTION_MESSAGE, 
+                                null, options, options[0]);
+                                
+                            if (selected != null) {
+                                for (int i = 0; i < options.length; i++) {
+                                    if (options[i].equals(selected)) {
+                                        out.println("RECONNECT " + ids[i]);
+                                        return;
+                                    }
+                                }
+                            }
+                            out.println("RECONNECT NONE");
+                        });
+                    }
                     else if (line.startsWith("PROP_MASTER ")) {
                         String[] props = line.substring(12).split(",");
                         for (String pStr : props) {
@@ -248,7 +283,6 @@ public class SugorokuClient extends JFrame {
                                 String prefix = "";
                                 if (!isTie && passet[i] == maxAsset) {
                                     color = "#ff8c00";
-                                    // 【変更】Winningの文字を削除し、王冠のみに変更
                                     prefix = "👑&nbsp;";
                                 }
                                 sb.append(String.format(" | <span style='white-space:nowrap; color:%s;'>%sP%d: %d万円/資%d万円%s (ｶｰﾄﾞ%d)</span>", 
@@ -429,7 +463,7 @@ public class SugorokuClient extends JFrame {
     private void showGameOver(String ranking) {
         gameOver = true;
         btnRoll.setEnabled(false); btnItem.setEnabled(false); setMoveButtonsEnabled(false);
-        StringBuilder sb = new StringBuilder("【最終決算】\n");
+        StringBuilder sb = new StringBuilder("【最終結果】\n");
         String[] entries = ranking.split(",");
         for (int i = 0; i < entries.length; i++) {
             String[] kv = entries[i].split(":");

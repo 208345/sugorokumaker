@@ -1,4 +1,4 @@
-// v2.6
+// v2.7
 
 import java.io.*;
 import java.net.*;
@@ -26,6 +26,9 @@ public class SugorokuServer {
     private static List<Player> players = new ArrayList<>();
     private static List<Property> properties = new ArrayList<>();
     private static Board board;
+    
+    // 【変更】裏スレッド（再接続処理）から参照できるようにクラス変数に変更
+    private static int currentTurn = 1; 
 
     public static void main(String[] args) throws IOException {
         int port = Integer.parseInt(args[0]);
@@ -55,17 +58,52 @@ public class SugorokuServer {
             p.sendMessage("MSG サーバーに接続しました。");
         }
 
+        // 🌟 再接続受付スレッドの強化
         new Thread(() -> {
             while (true) {
                 try {
                     Socket s = serverSocket.accept();
+                    BufferedReader tempIn = new BufferedReader(new InputStreamReader(s.getInputStream()));
+                    PrintWriter tempOut = new PrintWriter(new BufferedWriter(new OutputStreamWriter(s.getOutputStream())), true);
+                    
                     Player reconnector = null;
-                    for (Player p : players) if (!p.isConnected()) { reconnector = p; break; }
+                    List<Player> disconnected = new ArrayList<>();
+                    for (Player p : players) if (!p.isConnected()) disconnected.add(p);
+                    
+                    if (disconnected.isEmpty()) {
+                        tempOut.println("MSG_ERR 空き枠がありません（全員接続中です）。");
+                        s.close();
+                        continue;
+                    }
+                    
+                    // 切断者が1人だけなら自動的に割り当て
+                    if (disconnected.size() == 1) {
+                        reconnector = disconnected.get(0);
+                    } 
+                    // 2人以上の場合はクライアントに誰として復帰するか質問する
+                    else {
+                        StringBuilder sb = new StringBuilder("ASK_RECONNECT ");
+                        for (Player p : disconnected) {
+                            sb.append(p.getId()).append(":").append(p.getName()).append(",");
+                        }
+                        tempOut.println(sb.toString());
+                        
+                        // クライアントからの返答を待つ
+                        String res = tempIn.readLine();
+                        if (res != null && res.startsWith("RECONNECT ")) {
+                            try {
+                                int pid = Integer.parseInt(res.substring(10));
+                                for (Player p : disconnected) {
+                                    if (p.getId() == pid) reconnector = p;
+                                }
+                            } catch (Exception e){}
+                        }
+                    }
                     
                     if (reconnector != null) {
-                        reconnector.reconnect(s);
+                        reconnector.reconnect(s); // 新しいソケットを接続
                         sendBoardInitToPlayer(reconnector);
-                        broadcastState(players, 1, board);
+                        broadcastState(players, currentTurn, board);
                         reconnector.sendMessage("MSG === ゲームに復帰しました！ ===");
                         System.out.println(reconnector.getName() + " が再接続しました。");
                     } else {
@@ -82,13 +120,14 @@ public class SugorokuServer {
         
         String[] SEASONS = {"春", "夏", "秋", "冬"};
 
-        for (int turn = 1; turn <= turnLimit; turn++) {
-            int year = (turn - 1) / 4 + 1;
-            String season = SEASONS[(turn - 1) % 4];
+        // 【変更】currentTurn をクラス変数にしたため、宣言を省略
+        for (currentTurn = 1; currentTurn <= turnLimit; currentTurn++) {
+            int year = (currentTurn - 1) / 4 + 1;
+            String season = SEASONS[(currentTurn - 1) % 4];
 
             broadcast(players, "MSG \n--- 【" + year + "年" + season + "】 ---");
 
-            if (turn > 1 && (turn - 1) % 4 == 0) {
+            if (currentTurn > 1 && (currentTurn - 1) % 4 == 0) {
                 broadcast(players, "MSG === 🏢 【" + (year - 1) + "年度 決算】物件収益の配当 === ");
                 for (Player p : players) {
                     int totalRev = 0;
@@ -106,7 +145,7 @@ public class SugorokuServer {
                     continue;
                 }
 
-                broadcastState(players, turn, board);
+                broadcastState(players, currentTurn, board);
                 broadcast(players, "MSG ▶ " + current.getName() + " の番です。");
 
                 if (current.isInDebt()) {
@@ -167,7 +206,7 @@ public class SugorokuServer {
                             current.setX(nx); current.setY(ny);
                             steps--;
                         }
-                        broadcastState(players, turn, board);
+                        broadcastState(players, currentTurn, board);
                     } else {
                         current.sendMessage("MSG ⚠️ そちらには進めません！");
                     }
@@ -179,7 +218,7 @@ public class SugorokuServer {
                     broadcast(players, "MSG 🎉🎉 " + current.getName() + " が目的地に【ピッタリ】到着！ 援助金 10000万円獲得！ 🎉🎉");
                     current.addMoney(10000);
                     board.relocateGoal();
-                    broadcastState(players, turn, board);
+                    broadcastState(players, currentTurn, board);
                     
                     if (board.getTile(current.getX(), current.getY()) == 5) {
                         handlePropertyBuy(current);
@@ -203,13 +242,12 @@ public class SugorokuServer {
                     }
                 }
 
-                handleDebtSelling(current, turn);
-                broadcastState(players, turn, board);
+                handleDebtSelling(current, currentTurn);
+                broadcastState(players, currentTurn, board);
                 try { Thread.sleep(1000); } catch(InterruptedException e){}
             }
         }
         
-        // 【追加】ゲームループ終了後、最終決算を行う
         broadcast(players, "MSG \n=== 🏢 【最終年度 決算】物件収益の配当 === ");
         for (Player p : players) {
             int totalRev = 0;
@@ -220,9 +258,7 @@ public class SugorokuServer {
             }
         }
         
-        // 最終決算結果を画面に反映させる
         broadcastState(players, turnLimit, board);
-        
         announceRanking(players);
     }
 
